@@ -1,0 +1,5 @@
+beautifulsoup4==4.12.2  # for HTML parsing
+fastapi==0.103.0  # for the MCP server
+uvicorn==0.23.2   # ASGI server for FastAPI
+python-dotenv==1.0.0  # for environment variables
+pytest==7.4.0     # for testing
