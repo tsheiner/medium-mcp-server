@@ -45,7 +45,7 @@ venv.bak/
 .pytest_cache/
 
 # Project specific
-data/            # Raw Medium article content
+data/**            # Raw Medium article content and all subdirectories
 *.log            # Log files
 .coverage        # Code coverage files
 
