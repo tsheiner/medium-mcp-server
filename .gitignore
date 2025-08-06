@@ -45,14 +45,7 @@ venv.bak/
 .pytest_cache/
 
 # Project specific
-# First, track everything
-!*
-
-# Then explicitly ignore the data directory and its contents
-/data/
-/data/**/*
-
-# Other ignores
+data/**            # Raw Medium article content and all subdirectories
 *.log            # Log files
 .coverage        # Code coverage files
 
