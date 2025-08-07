@@ -1,7 +1,7 @@
 # Medium MCP Server Development Plan
 
 ## Project Goal
-Build a local MCP server that provides Claude with searchable access to a complete Medium article archive (including downloaded images) for content brainstorming and theme extension.
+Build a local MCP server that helps author structure a software design wisdom book by providing Claude with intelligent access to Medium article archive. The server treats each Medium essay as a potential book chapter and helps with combining drafts, identifying themes, and structuring the overall narrative flow.
 
 ## Current Status
 - ✅ Medium bulk export completed
@@ -61,16 +61,16 @@ export/
    - Topic clustering
    - Content gap identification
 
-## Planned MCP Tools
+## Planned MCP Tools (Book-Chapter Paradigm)
 
 | Tool Name | Purpose | Input | Output |
 |-----------|---------|-------|--------|
-| `search_articles` | Find articles by keyword/theme | query string | matching articles list |
-| `get_article` | Retrieve full article content | article ID/title | complete article text + metadata |
-| `list_topics` | Show all themes/tags | none | categorized topic list |
-| `find_similar` | Find related content | article ID | similar articles ranked |
-| `analyze_style` | Extract writing patterns | article set | style analysis |
-| `suggest_topics` | Identify content gaps | theme/area | suggested new topics |
+| `find_related_chapters` | Find essays around a theme to potentially combine | theme/concept | clustered related essays |
+| `analyze_chapter_completeness` | Detect which essays are finished vs drafts | none/essay ID | completion status analysis |
+| `extract_design_concepts` | Map design philosophy themes across essays | essay set | core concept taxonomy |
+| `identify_content_overlaps` | Find redundant/complementary material for merging | essay IDs | overlap analysis |
+| `suggest_chapter_sequence` | Analyze how essays could flow as book chapters | theme/concept | suggested chapter ordering |
+| `get_chapter_content` | Get full essay content for editing/combining | chapter ID | complete essay with metadata |
 
 ## Key Context for Next Session
 

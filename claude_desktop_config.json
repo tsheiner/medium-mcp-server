@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "medium-mcp-server": {
-      "command": "python",
-      "args": ["/Users/tsheiner/work/medium_mcp_server/src/server.py"],
+    "medium-book-mcp-server": {
+      "command": "python3",
+      "args": ["/Users/tsheiner/work/medium_mcp_server/src/book_server.py"],
       "env": {}
     }
   }
