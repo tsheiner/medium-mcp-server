@@ -166,31 +166,49 @@ def extract_design_concepts(title: str, content: str) -> List[str]:
 
 def build_chapter_index():
     """Build an index of all chapters in the data directory."""
+    import sys
     global chapter_cache, chapter_index
     
-    data_dir = get_data_directory()
-    if not data_dir.exists():
-        return
-    
-    chapter_index = []
-    chapter_cache = {}
-    
-    # Find all HTML files in article directories
-    for html_file in data_dir.glob("*/*.html"):
-        chapter_data = extract_chapter_content(html_file)
-        chapter_id = html_file.parent.name
+    try:
+        data_dir = get_data_directory()
+        print(f"Looking for data directory at: {data_dir}", file=sys.stderr)
         
-        chapter_cache[chapter_id] = chapter_data
-        chapter_index.append({
-            'id': chapter_id,
-            'title': chapter_data['title'],
-            'subtitle': chapter_data['subtitle'],
-            'description': chapter_data['description'],
-            'word_count': chapter_data['word_count'],
-            'has_images': chapter_data['has_images'],
-            'status': chapter_data['status'],
-            'design_concepts': chapter_data['design_concepts']
-        })
+        if not data_dir.exists():
+            print(f"Data directory does not exist: {data_dir}", file=sys.stderr)
+            return
+        
+        chapter_index = []
+        chapter_cache = {}
+        
+        # Find all HTML files in article directories
+        html_files = list(data_dir.glob("*/*.html"))
+        print(f"Found {len(html_files)} HTML files", file=sys.stderr)
+        
+        for html_file in html_files:
+            try:
+                chapter_data = extract_chapter_content(html_file)
+                chapter_id = html_file.parent.name
+                
+                chapter_cache[chapter_id] = chapter_data
+                chapter_index.append({
+                    'id': chapter_id,
+                    'title': chapter_data['title'],
+                    'subtitle': chapter_data['subtitle'],
+                    'description': chapter_data['description'],
+                    'word_count': chapter_data['word_count'],
+                    'has_images': chapter_data['has_images'],
+                    'status': chapter_data['status'],
+                    'design_concepts': chapter_data['design_concepts']
+                })
+            except Exception as e:
+                print(f"Error processing {html_file}: {e}", file=sys.stderr)
+        
+        print(f"Successfully indexed {len(chapter_index)} chapters", file=sys.stderr)
+        
+    except Exception as e:
+        print(f"Error in build_chapter_index: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
 
 def find_related_chapters_by_concepts(target_concepts: List[str], exclude_id: str = None) -> List[Dict]:
     """Find chapters with overlapping design concepts."""
@@ -569,23 +587,31 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
 
 async def main():
     """Main entry point for the MCP server."""
-    # Build the initial chapter index
-    build_chapter_index()
-    
-    # Run the server
-    async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
-        await server.run(
-            read_stream,
-            write_stream,
-            InitializationOptions(
-                server_name="medium-book-mcp-server",
-                server_version="1.0.0",
-                capabilities=server.get_capabilities(
-                    notification_options=NotificationOptions(),
-                    experimental_capabilities={}
+    try:
+        # Build the initial chapter index
+        build_chapter_index()
+        
+        # Run the server
+        async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
+            await server.run(
+                read_stream,
+                write_stream,
+                InitializationOptions(
+                    server_name="medium-book-mcp-server",
+                    server_version="1.0.0",
+                    capabilities=server.get_capabilities(
+                        notification_options=NotificationOptions(),
+                        experimental_capabilities={}
+                    )
                 )
             )
-        )
+    except Exception as e:
+        import sys
+        print(f"Error in main: {e}", file=sys.stderr)
+        print(f"Error type: {type(e)}", file=sys.stderr)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        raise
 
 if __name__ == "__main__":
     import asyncio
