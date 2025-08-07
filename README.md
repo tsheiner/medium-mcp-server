@@ -34,7 +34,7 @@ Perfect for authors who have been writing on Medium and want to transform their 
 
 ## Prerequisites
 
-1. **Medium Article Export**: You need your Medium articles in a specific directory structure with images downloaded locally
+1. **Medium Article Export**: You need your Medium articles in a specific directory structure with images downloaded locally.  See link below to downloader script.
 2. **Claude Desktop**: The MCP client for accessing the tools
 3. **Python 3.8+**: To run the MCP server
 
