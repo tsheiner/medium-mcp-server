@@ -237,6 +237,73 @@ def find_related_chapters_by_concepts(target_concepts: List[str], exclude_id: st
     
     return sorted(related, key=lambda x: x['overlap_score'], reverse=True)
 
+def find_chapter_by_fuzzy_name(search_name: str) -> Optional[str]:
+    """Find a chapter ID using fuzzy matching on titles and IDs."""
+    if not search_name:
+        return None
+    
+    search_lower = search_name.lower().strip()
+    
+    # 1. Exact ID match
+    if search_name in chapter_cache:
+        return search_name
+    
+    # 2. Exact title match (case insensitive)
+    for chapter_id, chapter_data in chapter_cache.items():
+        if chapter_data['title'].lower() == search_lower:
+            return chapter_id
+    
+    # 3. Title contains search term
+    for chapter_id, chapter_data in chapter_cache.items():
+        if search_lower in chapter_data['title'].lower():
+            return chapter_id
+    
+    # 4. Search term contains title (for partial matches)
+    for chapter_id, chapter_data in chapter_cache.items():
+        title_lower = chapter_data['title'].lower()
+        if title_lower in search_lower:
+            return chapter_id
+    
+    # 5. ID contains search term (remove spaces and dashes for matching)
+    search_normalized = search_lower.replace(' ', '-').replace('_', '-')
+    for chapter_id in chapter_cache.keys():
+        if search_normalized in chapter_id.lower():
+            return chapter_id
+    
+    # 6. Reverse: chapter ID contains normalized search
+    for chapter_id in chapter_cache.keys():
+        id_normalized = chapter_id.lower().replace('-', ' ').replace('_', ' ')
+        if search_lower in id_normalized:
+            return chapter_id
+    
+    return None
+
+def get_similar_chapter_suggestions(search_name: str, limit: int = 5) -> List[Dict[str, str]]:
+    """Get suggestions for similar chapter names when exact match fails."""
+    search_lower = search_name.lower().strip()
+    suggestions = []
+    
+    for chapter_id, chapter_data in chapter_cache.items():
+        title = chapter_data['title']
+        
+        # Calculate simple similarity based on common words
+        search_words = set(search_lower.split())
+        title_words = set(title.lower().split())
+        common_words = search_words.intersection(title_words)
+        
+        if common_words:
+            similarity_score = len(common_words) / max(len(search_words), len(title_words))
+            suggestions.append({
+                'id': chapter_id,
+                'title': title,
+                'score': similarity_score,
+                'status': chapter_data['status']
+            })
+    
+    # Sort by similarity score
+    suggestions.sort(key=lambda x: x['score'], reverse=True)
+    return suggestions[:limit]
+
 def analyze_content_overlaps(chapter_ids: List[str]) -> Dict:
     """Analyze content overlaps between specific chapters."""
     if len(chapter_ids) < 2:
@@ -407,14 +474,65 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
         chapter_id = arguments.get("chapter_id")
         include_drafts = arguments.get("include_drafts", True)
         
-        if chapter_id and chapter_id in chapter_cache:
-            # Find chapters similar to the specified chapter
-            target_concepts = chapter_cache[chapter_id]['design_concepts']
-            related = find_related_chapters_by_concepts(target_concepts, exclude_id=chapter_id)
-            result_text = f"Chapters related to '{chapter_cache[chapter_id]['title']}':\n\n"
+        if chapter_id:
+            # Try fuzzy matching on chapter_id
+            matched_id = find_chapter_by_fuzzy_name(chapter_id)
+            if matched_id:
+                # Find chapters similar to the specified chapter
+                target_concepts = chapter_cache[matched_id]['design_concepts']
+                related = find_related_chapters_by_concepts(target_concepts, exclude_id=matched_id)
+                result_text = f"Chapters related to '{chapter_cache[matched_id]['title']}':\n\n"
+                if matched_id != chapter_id:
+                    result_text += f"*Note: Found using fuzzy matching. Searched for '{chapter_id}', found '{matched_id}'*\n\n"
+            else:
+                # Chapter not found, provide suggestions
+                suggestions = get_similar_chapter_suggestions(chapter_id)
+                error_text = f"Error: Chapter '{chapter_id}' not found.\n\n"
+                if suggestions:
+                    error_text += "Did you mean one of these?\n"
+                    for suggestion in suggestions:
+                        error_text += f"- **{suggestion['title']}** (ID: `{suggestion['id']}`, {suggestion['status']})\n"
+                return [types.TextContent(type="text", text=error_text)]
         elif theme:
-            # Find chapters related to theme
-            related = find_related_chapters_by_concepts([theme])
+            # Enhanced theme search - also search in titles and content
+            theme_lower = theme.lower()
+            related = []
+            
+            for chapter_id, chapter_data in chapter_cache.items():
+                score = 0
+                shared_concepts = []
+                
+                # Check design concepts
+                for concept in chapter_data['design_concepts']:
+                    if theme_lower in concept.lower():
+                        score += 2
+                        shared_concepts.append(concept)
+                
+                # Check title
+                if theme_lower in chapter_data['title'].lower():
+                    score += 3
+                    shared_concepts.append("title match")
+                
+                # Check content (sample first 1000 chars to avoid performance issues)
+                content_sample = chapter_data['content'][:1000].lower()
+                theme_words = theme_lower.split()
+                for word in theme_words:
+                    if len(word) > 3 and word in content_sample:  # Only meaningful words
+                        score += 1
+                        if f"content:{word}" not in shared_concepts:
+                            shared_concepts.append(f"content:{word}")
+                
+                if score > 0:
+                    related.append({
+                        'id': chapter_id,
+                        'title': chapter_data['title'],
+                        'status': chapter_data['status'],
+                        'overlap_score': score,
+                        'shared_concepts': shared_concepts,
+                        'word_count': chapter_data['word_count']
+                    })
+            
+            related = sorted(related, key=lambda x: x['overlap_score'], reverse=True)
             result_text = f"Chapters related to theme '{theme}':\n\n"
         else:
             return [types.TextContent(type="text", text="Error: Must provide either 'theme' or 'chapter_id'")]
@@ -425,11 +543,13 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
         for chapter in related[:10]:  # Top 10 results
             result_text += f"**{chapter['title']}** ({chapter['status']})\n"
             result_text += f"ID: {chapter['id']}\n"
-            result_text += f"Shared concepts: {', '.join(chapter['shared_concepts'])}\n"
-            result_text += f"Words: {chapter['word_count']}, Overlap score: {chapter['overlap_score']}\n\n"
+            result_text += f"Shared concepts: {', '.join(chapter['shared_concepts'][:5])}\n"  # Limit display
+            result_text += f"Words: {chapter['word_count']}, Relevance score: {chapter['overlap_score']}\n\n"
         
         if not related:
             result_text += "No related chapters found.\n"
+            if theme:
+                result_text += f"Try different keywords or use broader terms related to '{theme}'.\n"
             
         return [types.TextContent(type="text", text=result_text)]
     
@@ -469,11 +589,28 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
         if not chapter_id:
             return [types.TextContent(type="text", text="Error: chapter_id is required")]
         
-        if chapter_id not in chapter_cache:
-            return [types.TextContent(type="text", text=f"Error: Chapter '{chapter_id}' not found")]
+        # Try fuzzy matching first
+        matched_id = find_chapter_by_fuzzy_name(chapter_id)
         
-        chapter = chapter_cache[chapter_id]
+        if not matched_id:
+            # Provide helpful suggestions
+            suggestions = get_similar_chapter_suggestions(chapter_id)
+            error_text = f"Error: Chapter '{chapter_id}' not found.\n\n"
+            
+            if suggestions:
+                error_text += "Did you mean one of these?\n"
+                for suggestion in suggestions:
+                    error_text += f"- **{suggestion['title']}** (ID: `{suggestion['id']}`, {suggestion['status']})\n"
+            else:
+                error_text += "Use `analyze_chapter_completeness` to see all available chapters."
+            
+            return [types.TextContent(type="text", text=error_text)]
+        
+        chapter = chapter_cache[matched_id]
         result_text = f"# {chapter['title']}\n\n"
+        
+        if matched_id != chapter_id:
+            result_text += f"*Note: Found using fuzzy matching. Searched for '{chapter_id}', found '{matched_id}'*\n\n"
         
         if chapter['subtitle']:
             result_text += f"**Subtitle:** {chapter['subtitle']}\n\n"
@@ -527,12 +664,44 @@ async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.T
         if len(chapter_ids) < 2:
             return [types.TextContent(type="text", text="Error: Need at least 2 chapter IDs")]
         
-        overlap_analysis = analyze_content_overlaps(chapter_ids)
+        # Use fuzzy matching for all chapter IDs
+        matched_ids = []
+        fuzzy_matches = []
+        not_found = []
+        
+        for chapter_id in chapter_ids:
+            matched_id = find_chapter_by_fuzzy_name(chapter_id)
+            if matched_id:
+                matched_ids.append(matched_id)
+                if matched_id != chapter_id:
+                    fuzzy_matches.append(f"'{chapter_id}' → '{matched_id}'")
+            else:
+                not_found.append(chapter_id)
+        
+        if not_found:
+            error_text = f"Error: Could not find chapters: {', '.join(not_found)}\n\n"
+            for missing in not_found:
+                suggestions = get_similar_chapter_suggestions(missing, 3)
+                if suggestions:
+                    error_text += f"Suggestions for '{missing}':\n"
+                    for suggestion in suggestions:
+                        error_text += f"- **{suggestion['title']}** (ID: `{suggestion['id']}`)\n"
+                    error_text += "\n"
+            return [types.TextContent(type="text", text=error_text)]
+        
+        if len(matched_ids) < 2:
+            return [types.TextContent(type="text", text="Error: Need at least 2 valid chapters for overlap analysis")]
+        
+        overlap_analysis = analyze_content_overlaps(matched_ids)
         
         if "error" in overlap_analysis:
             return [types.TextContent(type="text", text=f"Error: {overlap_analysis['error']}")]
         
         result_text = f"Content Overlap Analysis:\n\n"
+        
+        if fuzzy_matches:
+            result_text += f"*Note: Used fuzzy matching for: {', '.join(fuzzy_matches)}*\n\n"
+        
         result_text += f"**Chapters Analyzed:** {', '.join(overlap_analysis['chapters_analyzed'])}\n\n"
         
         result_text += f"**Common Themes:** {', '.join(overlap_analysis['common_concepts'][:15])}\n\n"
