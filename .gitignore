@@ -48,6 +48,7 @@ venv.bak/
 data/
 data/*
 data/**/*
+claude_desktop_config.json  # Contains personal paths
 *.log            # Log files
 .coverage        # Code coverage files
 
